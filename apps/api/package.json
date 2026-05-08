@@ -1,0 +1,43 @@
+{
+  "name": "@attiko/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./router": "./src/router.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@attiko/db": "workspace:*",
+    "@attiko/shared": "workspace:*",
+    "@attiko/scrapers": "workspace:*",
+    "@clerk/backend": "^1.0.0",
+    "drizzle-orm": "^0.33.0",
+    "@trpc/server": "^11.0.0",
+    "bullmq": "^5.0.0",
+    "express": "^4.19.0",
+    "ioredis": "^5.3.2",
+    "neverthrow": "^8.0.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "superjson": "^2.2.0",
+    "zod": "^3.23.0",
+    "@paralleldrive/cuid2": "^2.2.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
