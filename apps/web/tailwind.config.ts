@@ -11,16 +11,23 @@ export default {
     },
     extend: {
       colors: {
-        // Attiko palette — editorial eco-luxury
-        bone: "#F5F0E8",
-        sand: "#E8DCC8",
-        linen: "#F0EBE0",
-        stone: "#C4B8A0",
-        forest: "#1E3A2F",
-        "deep-forest": "#0F1F18",
-        bark: "#4A3728",
+        // Attiko palette — black / gold / charcoal
+        black: "#0A0A0A",
+        charcoal: "#1A1A1A",
+        "charcoal-mid": "#2A2A2A",
+        "charcoal-light": "#3A3A3A",
         gold: "#C9A84C",
-        "off-white": "#FAF7F2",
+        "gold-light": "#E8C76A",
+        "gold-muted": "#7A6030",
+        // keep legacy aliases pointing to new palette
+        bone: "#C9A84C",
+        sand: "#2A2A2A",
+        linen: "#1A1A1A",
+        stone: "#8A8A8A",
+        forest: "#C9A84C",
+        "deep-forest": "#0A0A0A",
+        bark: "#C9A84C",
+        "off-white": "#0A0A0A",
 
         // shadcn/ui variables
         border: "hsl(var(--border))",

@@ -33,30 +33,6 @@ services:
       timeout: 3s
       retries: 10
 
-  api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    container_name: attiko_api
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://attiko:attiko_dev@postgres:5432/attiko_dev
-      REDIS_URL: redis://redis:6379
-      PORT: 4000
-    env_file:
-      - .env.local
-    ports:
-      - "4000:4000"
-    volumes:
-      - ./apps/api/src:/app/apps/api/src:ro
-      - ./packages:/app/packages:ro
-
 volumes:
   postgres_data:
   redis_data:

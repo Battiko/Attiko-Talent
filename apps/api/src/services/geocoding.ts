@@ -2,56 +2,48 @@ import { z } from "zod";
 import { AppError, ok, err, type Result } from "@attiko/shared/errors";
 import type { GeoPoint } from "@attiko/shared/types";
 
-const geocodeResponseSchema = z.object({
-  features: z.array(
-    z.object({
-      center: z.tuple([z.number(), z.number()]),
-      place_name: z.string(),
-      context: z
-        .array(
-          z.object({
-            id: z.string(),
-            text: z.string(),
-          })
-        )
-        .optional(),
-    })
-  ),
-});
+const nominatimSchema = z.array(
+  z.object({
+    lat: z.string(),
+    lon: z.string(),
+    display_name: z.string(),
+    address: z
+      .object({
+        city: z.string().optional(),
+        town: z.string().optional(),
+        village: z.string().optional(),
+        country: z.string().optional(),
+      })
+      .optional(),
+  })
+);
 
 export async function geocodeLocation(
   location: string
 ): Promise<Result<GeoPoint & { label: string; city: string | null; country: string | null }, AppError>> {
-  const token = process.env["MAPBOX_SECRET_TOKEN"] ?? process.env["NEXT_PUBLIC_MAPBOX_TOKEN"];
-  if (!token) {
-    return err(AppError.validation("Mapbox token not configured"));
-  }
-
   const encoded = encodeURIComponent(location);
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json?access_token=${token}&types=place,region,country&limit=1`;
+  const url = `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1&addressdetails=1`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Attiko/1.0 (bobbyattiko@me.com)" },
+    });
     if (!res.ok) {
-      return err(AppError.externalApi("Mapbox", `Status ${res.status}`));
+      return err(AppError.externalApi("Nominatim", `Status ${res.status}`));
     }
-    const data = geocodeResponseSchema.parse(await res.json());
-    const first = data.features[0];
+    const data = nominatimSchema.parse(await res.json());
+    const first = data[0];
     if (!first) {
       return err(AppError.notFound(`Location: ${location}`));
     }
 
-    const [lng, lat] = first.center;
-    let city: string | null = null;
-    let country: string | null = null;
+    const lat = parseFloat(first.lat);
+    const lng = parseFloat(first.lon);
+    const city = first.address?.city ?? first.address?.town ?? first.address?.village ?? null;
+    const country = first.address?.country ?? null;
 
-    for (const ctx of first.context ?? []) {
-      if (ctx.id.startsWith("place.")) city = ctx.text;
-      if (ctx.id.startsWith("country.")) country = ctx.text;
-    }
-
-    return ok({ lat, lng: lng ?? 0, label: first.place_name, city, country });
+    return ok({ lat, lng, label: first.display_name, city, country });
   } catch (cause) {
-    return err(AppError.externalApi("Mapbox", cause));
+    return err(AppError.externalApi("Nominatim", cause));
   }
 }

@@ -14,7 +14,7 @@ function SearchPage() {
   const radius = parseInt(params.get("r") ?? "50", 10);
 
   return (
-    <div className="min-h-screen bg-off-white">
+    <div className="min-h-screen bg-black">
       <SiteNav />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16">
         <div className="mb-6">
@@ -35,7 +35,7 @@ function SearchPage() {
           </div>
         ) : (
           <div className="text-center py-24 text-muted-foreground">
-            <p className="font-display text-2xl text-bark">Enter a talent type and city to begin.</p>
+            <p className="font-display text-2xl text-gold">Enter a talent type and city to begin.</p>
           </div>
         )}
       </div>

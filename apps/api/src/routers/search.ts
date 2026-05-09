@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import { searchInputSchema, DEFAULT_RANKING_WEIGHTS } from "@attiko/shared/schemas";
 import { getDb } from "@attiko/db/client";
-import { artists, platformProfiles, users } from "@attiko/db/schema";
+import { artists, platformProfiles, users, artistContacts } from "@attiko/db/schema";
 import { sql, eq, and, not, lte, gte, or } from "drizzle-orm";
 import { geocodeLocation } from "../services/geocoding.js";
 import { logger } from "../logger.js";
@@ -11,6 +11,11 @@ import { logger } from "../logger.js";
 const MILES_TO_METERS = 1609.344;
 
 export const searchRouter = router({
+  me: protectedProcedure.query(({ ctx }) => ({
+    role: ctx.user.role,
+    email: ctx.user.email,
+  })),
+
   search: protectedProcedure
     .input(searchInputSchema)
     .query(async ({ input, ctx }) => {
@@ -18,7 +23,6 @@ export const searchRouter = router({
       const db = getDb();
       const weights = input.sortWeights ?? DEFAULT_RANKING_WEIGHTS;
 
-      // Geocode the location
       const geoResult = await geocodeLocation(input.location);
       if (geoResult.isErr()) {
         logger.warn({ error: geoResult.error, location: input.location }, "Geocoding failed");
@@ -30,39 +34,43 @@ export const searchRouter = router({
       const { lat, lng } = geoResult.value;
       const radiusMeters = input.radiusMiles * MILES_TO_METERS;
 
-      // Base query — PostGIS spatial filter
       const conditions = [
         not(artists.isOptedOut),
-        sql`${artists.geoPoint} IS NOT NULL`,
+        sql`geo_point IS NOT NULL`,
         sql`ST_DWithin(
-          ${artists.geoPoint}::geography,
+          geo_point::geography,
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
           ${radiusMeters}
         )`,
       ];
 
+      if (input.query && input.query.trim()) {
+        const words = input.query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const allWordConditions = words.flatMap((word) => {
+          const pattern = `%${word}%`;
+          return [
+            sql`LOWER(${artists.name}) LIKE ${pattern}`,
+            sql`LOWER(COALESCE(${artists.bio}, '')) LIKE ${pattern}`,
+            sql`LOWER(${artists.talentType}::text) LIKE ${pattern}`,
+            sql`EXISTS (SELECT 1 FROM unnest(${artists.genres}) g WHERE LOWER(g) LIKE ${pattern})`,
+            sql`EXISTS (SELECT 1 FROM unnest(${artists.tags}) t WHERE LOWER(t) LIKE ${pattern})`,
+          ];
+        });
+        if (allWordConditions.length > 0) {
+          conditions.push(or(...allWordConditions)!);
+        }
+      }
+
       if (input.talentTypes && input.talentTypes.length > 0) {
-        conditions.push(
-          or(...input.talentTypes.map((t) => eq(artists.talentType, t)))!
-        );
+        conditions.push(or(...input.talentTypes.map((t) => eq(artists.talentType, t)))!);
       }
 
       if (input.budgetMin !== undefined) {
-        conditions.push(
-          or(
-            lte(artists.rateMinCents, input.budgetMin * 100),
-            sql`${artists.rateMinCents} IS NULL`
-          )!
-        );
+        conditions.push(or(lte(artists.rateMinCents, input.budgetMin * 100), sql`${artists.rateMinCents} IS NULL`)!);
       }
 
       if (input.budgetMax !== undefined) {
-        conditions.push(
-          or(
-            gte(artists.rateMaxCents, input.budgetMax * 100),
-            sql`${artists.rateMaxCents} IS NULL`
-          )!
-        );
+        conditions.push(or(gte(artists.rateMaxCents, input.budgetMax * 100), sql`${artists.rateMaxCents} IS NULL`)!);
       }
 
       const offset = (input.page - 1) * input.pageSize;
@@ -71,7 +79,7 @@ export const searchRouter = router({
         .select({
           artist: artists,
           distanceMeters: sql<number>`ST_Distance(
-            ${artists.geoPoint}::geography,
+            geo_point::geography,
             ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography
           )`,
         })
@@ -79,27 +87,21 @@ export const searchRouter = router({
         .where(and(...conditions))
         .orderBy(
           sql`(
-            COALESCE(${artists.overallScore}, 0) * ${weights.semantic + weights.socialProof + weights.eventFit + weights.mediaQuality}
-            + COALESCE(${artists.recencyScore}, 0) * ${weights.recency}
+            COALESCE(${artists.overallScore}, 0) * ${sql.raw(String(weights.semantic + weights.socialProof + weights.eventFit + weights.mediaQuality))}
+            + COALESCE(${artists.recencyScore}, 0) * ${sql.raw(String(weights.recency))}
             - (ST_Distance(
-                ${artists.geoPoint}::geography,
+                geo_point::geography,
                 ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography
-              ) / ${radiusMeters}) * ${weights.geo} * 100
+              ) / ${radiusMeters}) * ${sql.raw(String(weights.geo))} * 100
           ) DESC`
         )
         .limit(input.pageSize)
         .offset(offset);
 
-      // Fetch platform profiles for results
       const artistIds = rows.map((r) => r.artist.id);
       const profiles =
         artistIds.length > 0
-          ? await db
-              .select()
-              .from(platformProfiles)
-              .where(
-                or(...artistIds.map((id) => eq(platformProfiles.artistId, id)))!
-              )
+          ? await db.select().from(platformProfiles).where(or(...artistIds.map((id) => eq(platformProfiles.artistId, id)))!)
           : [];
 
       const profilesByArtist = new Map<string, typeof profiles>();
@@ -109,7 +111,6 @@ export const searchRouter = router({
         profilesByArtist.set(p.artistId, arr);
       }
 
-      // Increment search counter (skip for owner/admin)
       if (user.role !== "owner" && user.role !== "admin") {
         await db
           .update(users)
@@ -184,14 +185,13 @@ export const searchRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Artist not found" });
       }
 
-      const profiles = await db
-        .select()
-        .from(platformProfiles)
-        .where(eq(platformProfiles.artistId, row.id));
+      const [profiles, contacts] = await Promise.all([
+        db.select().from(platformProfiles).where(eq(platformProfiles.artistId, row.id)),
+        db.select().from(artistContacts).where(eq(artistContacts.artistId, row.id)).orderBy(artistContacts.confidenceScore),
+      ]);
 
       return {
         ...row,
-        geoPoint: undefined, // never serialize PostGIS type to client
         platformProfiles: profiles.map((p) => ({
           source: p.source,
           externalId: p.externalId,
@@ -202,6 +202,14 @@ export const searchRouter = router({
           viewCount: p.viewCount,
           playCount: p.playCount,
           lastFetchedAt: p.lastFetchedAt?.toISOString() ?? null,
+        })),
+        contacts: contacts.map((c) => ({
+          type: c.type,
+          subtype: c.subtype,
+          value: c.value,
+          label: c.label,
+          isVerified: c.isVerified,
+          confidenceScore: c.confidenceScore,
         })),
       };
     }),

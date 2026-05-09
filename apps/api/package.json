@@ -9,7 +9,7 @@
     "./router": "./src/router.ts"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file .env src/index.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
@@ -18,20 +18,22 @@
   },
   "dependencies": {
     "@attiko/db": "workspace:*",
-    "@attiko/shared": "workspace:*",
     "@attiko/scrapers": "workspace:*",
+    "@attiko/shared": "workspace:*",
     "@clerk/backend": "^1.0.0",
-    "drizzle-orm": "^0.33.0",
+    "@paralleldrive/cuid2": "^2.2.2",
     "@trpc/server": "^11.0.0",
+    "@types/cors": "^2.8.19",
     "bullmq": "^5.0.0",
+    "cors": "^2.8.6",
+    "drizzle-orm": "^0.33.0",
     "express": "^4.19.0",
     "ioredis": "^5.3.2",
     "neverthrow": "^8.0.0",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
     "superjson": "^2.2.0",
-    "zod": "^3.23.0",
-    "@paralleldrive/cuid2": "^2.2.2"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

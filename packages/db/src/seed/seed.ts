@@ -60,7 +60,6 @@ async function seed(): Promise<void> {
 
     if (!artist) continue;
 
-    // Update geo_point with PostGIS
     await db.execute(
       sql`UPDATE artists SET geo_point = ST_SetSRID(ST_MakePoint(${data.lng}, ${data.lat}), 4326) WHERE id = ${artist.id}`
     );

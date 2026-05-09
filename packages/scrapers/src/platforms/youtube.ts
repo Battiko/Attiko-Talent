@@ -41,12 +41,12 @@ export class YouTubeScraper extends BaseScraper {
 
   async search(
     query: string,
-    _location: string
+    location: string
   ): Promise<Result<ScrapeResult[], AppError>> {
     const params = new URLSearchParams({
       part: "snippet",
       type: "channel",
-      q: `${query} wedding musician`,
+      q: `${query} ${location}`.trim(),
       maxResults: "50",
       key: this.apiKey,
     });

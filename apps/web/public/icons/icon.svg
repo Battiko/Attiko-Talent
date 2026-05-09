@@ -1,0 +1,58 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8C76A;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#C9A84C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#A07830;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8C76A;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#8A6020;stop-opacity:0.6" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" fill="#0A0A0A"/>
+
+  <!-- Outer border -->
+  <rect x="9.216" y="9.216" width="493.568" height="493.568"
+    fill="none" stroke="url(#borderGrad)" stroke-width="9.216"/>
+
+  <!-- Inner border (double-rule luxury frame) -->
+  <rect x="32.256" y="32.256"
+    width="447.488" height="447.488"
+    fill="none" stroke="url(#borderGrad)" stroke-width="4.608" opacity="0.5"/>
+
+  <!-- The A lettermark -->
+  <text
+    x="256"
+    y="350.72"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="266.24"
+    font-weight="300"
+    fill="url(#goldGrad)"
+    text-anchor="middle"
+    letter-spacing="5.12"
+  >A</text>
+
+  <!-- Thin decorative line under A -->
+  <line
+    x1="179.2" y1="399.36"
+    x2="332.8" y2="399.36"
+    stroke="url(#borderGrad)" stroke-width="5.529599999999999" opacity="0.7"/>
+
+  <!-- Corner marks -->
+  
+  <!-- TL -->
+  <line x1="23.04" y1="23.04" x2="51.2" y2="23.04" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+  <line x1="23.04" y1="23.04" x2="23.04" y2="51.2" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+  <!-- TR -->
+  <line x1="488.96" y1="23.04" x2="460.79999999999995" y2="23.04" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+  <line x1="488.96" y1="23.04" x2="488.96" y2="51.2" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+  <!-- BL -->
+  <line x1="23.04" y1="488.96" x2="51.2" y2="488.96" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+  <line x1="23.04" y1="488.96" x2="23.04" y2="460.79999999999995" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+  <!-- BR -->
+  <line x1="488.96" y1="488.96" x2="460.79999999999995" y2="488.96" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+  <line x1="488.96" y1="488.96" x2="488.96" y2="460.79999999999995" stroke="#C9A84C" stroke-width="6.144" opacity="0.4"/>
+</svg>

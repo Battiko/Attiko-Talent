@@ -4,25 +4,25 @@
 
 @layer base {
   :root {
-    --background: 40 30% 97%;
-    --foreground: 150 20% 12%;
-    --card: 40 25% 95%;
-    --card-foreground: 150 20% 12%;
-    --popover: 40 25% 95%;
-    --popover-foreground: 150 20% 12%;
-    --primary: 150 35% 16%;
-    --primary-foreground: 40 30% 97%;
-    --secondary: 38 25% 88%;
-    --secondary-foreground: 150 20% 12%;
-    --muted: 38 20% 91%;
-    --muted-foreground: 150 10% 42%;
-    --accent: 38 25% 85%;
-    --accent-foreground: 150 20% 12%;
+    --background: 0 0% 4%;
+    --foreground: 42 52% 54%;
+    --card: 0 0% 10%;
+    --card-foreground: 42 52% 54%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 42 52% 54%;
+    --primary: 42 52% 54%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 42 52% 54%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 42 52% 54%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 38 20% 84%;
-    --input: 38 20% 84%;
-    --ring: 150 35% 16%;
+    --border: 0 0% 16%;
+    --input: 0 0% 10%;
+    --ring: 42 52% 54%;
     --radius: 0.375rem;
   }
 
@@ -31,17 +31,50 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-black text-gold antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
   h1, h2, h3, h4 {
     @apply font-display;
+    letter-spacing: 0.01em;
+  }
+
+  /* Luxury scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0A0A0A;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2A2A2A;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #C9A84C40;
+  }
+
+  /* Selection color */
+  ::selection {
+    background: #C9A84C30;
+    color: #C9A84C;
   }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .luxury-border {
+    border-color: rgba(201, 168, 76, 0.15);
+  }
+
+  .gold-gradient {
+    background: linear-gradient(135deg, #C9A84C, #E8C76A);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }

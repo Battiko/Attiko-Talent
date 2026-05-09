@@ -8,17 +8,9 @@ import {
   jsonb,
   index,
   pgEnum,
-  customType,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-
-// PostGIS geometry point — stored as GEOMETRY(Point, 4326)
-const geometryPoint = customType<{ data: string; driverData: string }>({
-  dataType() {
-    return "GEOMETRY(Point, 4326)";
-  },
-});
 
 export const talentTypeEnum = pgEnum("talent_type", [
   "musician",
@@ -69,7 +61,7 @@ export const artists = pgTable(
     countryCode: text("country_code"),
     lat: real("lat"),
     lng: real("lng"),
-    geoPoint: geometryPoint("geo_point"),
+    // geo_point (GEOMETRY) column is added via raw SQL after push — PostGIS types are not supported by drizzle-kit
     // Media
     imageUrl: text("image_url"),
     imageHash: text("image_hash"),
