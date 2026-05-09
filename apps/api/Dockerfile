@@ -18,7 +18,7 @@ RUN pnpm --filter @attiko/shared build 2>/dev/null || true
 RUN pnpm --filter @attiko/db build 2>/dev/null || true
 RUN pnpm --filter @attiko/scrapers build 2>/dev/null || true
 RUN pnpm --filter @attiko/api build
-RUN pnpm deploy --filter @attiko/api --prod /deploy
+RUN pnpm deploy --filter @attiko/api --prod --legacy /deploy
 
 FROM node:22-alpine AS runner
 WORKDIR /app
