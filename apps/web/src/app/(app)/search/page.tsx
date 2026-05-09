@@ -34,7 +34,7 @@ function SearchPage() {
             </main>
           </div>
         ) : (
-          <div className="text-center py-24 text-muted-foreground">
+          <div className="text-center py-24">
             <p className="font-display text-2xl text-gold">Enter a talent type and city to begin.</p>
           </div>
         )}

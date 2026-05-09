@@ -40,7 +40,7 @@ export function LandingHero() {
 
         <p className="text-stone/70 text-base sm:text-lg max-w-lg mb-14 leading-relaxed font-sans font-light">
           Discover world-class musicians, vocalists, DJs, and dancers.
-          Built for wedding planners, event producers, and private clients.
+          Built for talent agents and event producers.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-4">
