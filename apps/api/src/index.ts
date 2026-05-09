@@ -8,6 +8,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { appRouter } from "./router.js";
 import { clerkAuthMiddleware } from "./middleware/auth.js";
 import { runHealthCheck } from "./services/health.js";
+import { startCronJobs } from "./cron.js";
 import { logger } from "./logger.js";
 import type { Context } from "./trpc.js";
 
@@ -59,6 +60,7 @@ app.use(
 
 const server = app.listen(PORT, () => {
   logger.info({ port: PORT }, "Attiko API server started");
+  startCronJobs();
 });
 
 // Graceful shutdown
