@@ -9,7 +9,7 @@ import { formatRate } from "@/lib/utils";
 
 export default function ShortlistPage({ params }: { params: { id: string } }) {
   const { data, refetch, isLoading } = trpc.shortlists.get.useQuery({ id: params.id });
-  const removeArtist = trpc.shortlists.removeArtist.useMutation({ onSuccess: refetch });
+  const removeArtist = trpc.shortlists.removeArtist.useMutation({ onSuccess: () => refetch() });
   const [removing, setRemoving] = useState<string | null>(null);
 
   if (isLoading) {
