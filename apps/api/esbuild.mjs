@@ -9,11 +9,15 @@ await build({
   plugins: [{
     name: 'externalize-deps',
     setup(build) {
-      // Externalize all npm packages except @attiko/* workspace packages
-      build.onResolve({ filter: /^(?!node:|@attiko\/)(@[^/]+\/[^/]+|[^@./][^/]*)/ }, args => ({
-        external: true,
-        path: args.path,
-      }));
+      build.onResolve({ filter: /.*/ }, args => {
+        const p = args.path;
+        // Leave relative imports and node: builtins alone
+        if (p.startsWith('.') || p.startsWith('/') || p.startsWith('node:')) return null;
+        // Bundle @attiko/* workspace packages inline
+        if (p.startsWith('@attiko/')) return null;
+        // Externalize all other npm packages
+        return { external: true, path: p };
+      });
     },
   }],
 });
