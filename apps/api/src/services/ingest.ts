@@ -98,9 +98,10 @@ export async function ingestScrapeResults(
         // Update existing artist's scores and media
         await db
           .update(artists)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .set({
-            imageUrl: artistData.imageUrl ?? undefined,
-            bio: artistData.bio ?? undefined,
+            imageUrl: artistData.imageUrl ?? null,
+            bio: artistData.bio ?? null,
             genres: genres.length > 0 ? genres : undefined,
             socialProofScore,
             mediaQualityScore,
@@ -108,19 +109,20 @@ export async function ingestScrapeResults(
             overallScore,
             enrichedAt: new Date(),
             updatedAt: new Date(),
-          })
+          } as any)
           .where(eq(artists.id, existingProfile.artistId));
 
         // Update platform profile
         await db
           .update(platformProfiles)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .set({
-            followerCount: primaryProfile.followerCount ?? undefined,
-            imageUrl: primaryProfile.imageUrl ?? undefined,
-            bio: primaryProfile.bio ?? undefined,
+            followerCount: primaryProfile.followerCount ?? null,
+            imageUrl: primaryProfile.imageUrl ?? null,
+            bio: primaryProfile.bio ?? null,
             lastFetchedAt: new Date(),
             updatedAt: new Date(),
-          })
+          } as any)
           .where(
             and(
               eq(platformProfiles.source, primaryProfile.source),

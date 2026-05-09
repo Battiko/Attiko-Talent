@@ -157,7 +157,8 @@ export const operatorRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = getDb();
       const { id, ...fields } = input;
-      await db.update(artists).set({ ...fields, updatedAt: new Date() }).where(eq(artists.id, id));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await db.update(artists).set({ ...fields, updatedAt: new Date() } as any).where(eq(artists.id, id));
       await db.insert(auditLog).values({ actorId: ctx.user.id, actorRole: ctx.user.role, action: "update_artist", targetType: "artist", targetId: id });
       return { success: true };
     }),
