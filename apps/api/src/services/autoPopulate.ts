@@ -1,4 +1,4 @@
-import { LastFmScraper, MusicBrainzScraper } from "@attiko/scrapers";
+import { YouTubeScraper, LastFmScraper, MusicBrainzScraper } from "@attiko/scrapers";
 import { geocodeLocation } from "./geocoding.js";
 import { ingestScrapeResults } from "./ingest.js";
 import { logger } from "../logger.js";
@@ -35,9 +35,11 @@ const TALENT_TYPES = [
 ];
 
 const LOCATIONS = ["New York City", "Brooklyn", "Newark"];
-// YouTube excluded — 100/day quota is exhausted by bulk runs; use it only for per-artist enrichment
-const PLATFORMS = ["lastfm", "musicbrainz"] as const;
-type Platform = typeof PLATFORMS[number];
+
+// YouTube quota: 10,000 units/day, each search = 100 units → 100 searches max.
+// We cap at 80 per run to leave headroom for per-artist enrichment.
+// Each run shuffles the talent types so YouTube rotates through the full list over time.
+const YOUTUBE_DAILY_CAP = 80;
 
 interface AutoPopulateState {
   running: boolean;
@@ -51,6 +53,7 @@ interface AutoPopulateState {
   updated: number;
   skipped: number;
   errors: string[];
+  youtubeSearchesThisRun: number;
 }
 
 const state: AutoPopulateState = {
@@ -65,6 +68,7 @@ const state: AutoPopulateState = {
   updated: 0,
   skipped: 0,
   errors: [],
+  youtubeSearchesThisRun: 0,
 };
 
 export function getAutoPopulateStatus(): AutoPopulateState {
@@ -75,10 +79,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function scrapeOne(query: string, location: string, platform: Platform): Promise<void> {
-  const apiKey = platform === "lastfm" ? process.env["LASTFM_API_KEY"] : null;
-  if (platform === "lastfm" && !apiKey) return;
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
+}
 
+async function scrapeOne(query: string, location: string, platform: "youtube" | "lastfm" | "musicbrainz"): Promise<void> {
   const geoResult = await geocodeLocation(location);
   if (geoResult.isErr()) {
     state.errors.push(`Geocode failed: ${location}`);
@@ -87,8 +97,15 @@ async function scrapeOne(query: string, location: string, platform: Platform): P
   const geo = geoResult.value;
 
   let results;
-  if (platform === "lastfm") {
-    const scraper = new LastFmScraper(apiKey!);
+  if (platform === "youtube") {
+    const apiKey = process.env["YOUTUBE_API_KEY"];
+    if (!apiKey) return;
+    const scraper = new YouTubeScraper(apiKey);
+    results = await scraper.search(query, location);
+  } else if (platform === "lastfm") {
+    const apiKey = process.env["LASTFM_API_KEY"];
+    if (!apiKey) return;
+    const scraper = new LastFmScraper(apiKey);
     results = await scraper.search(query, location);
   } else {
     const scraper = new MusicBrainzScraper();
@@ -112,25 +129,30 @@ export async function runAutoPopulate(): Promise<void> {
     return;
   }
 
+  // Shuffle so YouTube covers different types each day, rotating through the full list over time
+  const shuffledTypes = shuffle(TALENT_TYPES);
+
   state.running = true;
   state.startedAt = new Date().toISOString();
   state.completedAt = null;
-  state.totalSteps = TALENT_TYPES.length * LOCATIONS.length;
+  state.totalSteps = shuffledTypes.length * LOCATIONS.length;
   state.completedSteps = 0;
   state.created = 0;
   state.updated = 0;
   state.skipped = 0;
   state.errors = [];
+  state.youtubeSearchesThisRun = 0;
 
-  logger.info({ totalSteps: state.totalSteps }, "Auto-populate started");
+  logger.info({ totalSteps: state.totalSteps, youtubeCap: YOUTUBE_DAILY_CAP }, "Auto-populate started");
 
   try {
-    for (const talentType of TALENT_TYPES) {
+    for (const talentType of shuffledTypes) {
       for (const location of LOCATIONS) {
         state.currentQuery = talentType;
         state.currentLocation = location;
 
-        for (const platform of PLATFORMS) {
+        // Always run Last.fm and MusicBrainz — no quota limits
+        for (const platform of ["lastfm", "musicbrainz"] as const) {
           try {
             await scrapeOne(talentType, location, platform);
           } catch (err) {
@@ -140,9 +162,24 @@ export async function runAutoPopulate(): Promise<void> {
           await sleep(400);
         }
 
+        // YouTube: only run if under the daily cap
+        if (state.youtubeSearchesThisRun < YOUTUBE_DAILY_CAP) {
+          try {
+            await scrapeOne(talentType, location, "youtube");
+            state.youtubeSearchesThisRun++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            state.errors.push(`youtube(${talentType}@${location}): ${msg}`);
+          }
+          await sleep(400);
+        }
+
         state.completedSteps++;
         if (state.completedSteps % 10 === 0) {
-          logger.info({ completed: state.completedSteps, total: state.totalSteps, created: state.created }, "Auto-populate progress");
+          logger.info(
+            { completed: state.completedSteps, total: state.totalSteps, created: state.created, youtubeUsed: state.youtubeSearchesThisRun },
+            "Auto-populate progress"
+          );
         }
       }
     }
@@ -151,6 +188,9 @@ export async function runAutoPopulate(): Promise<void> {
     state.completedAt = new Date().toISOString();
     state.currentQuery = null;
     state.currentLocation = null;
-    logger.info({ created: state.created, updated: state.updated, errors: state.errors.length }, "Auto-populate complete");
+    logger.info(
+      { created: state.created, updated: state.updated, errors: state.errors.length, youtubeUsed: state.youtubeSearchesThisRun },
+      "Auto-populate complete"
+    );
   }
 }
