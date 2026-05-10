@@ -4,7 +4,7 @@ import { router, protectedProcedure } from "../trpc.js";
 import { searchInputSchema, DEFAULT_RANKING_WEIGHTS } from "@attiko/shared/schemas";
 import { getDb } from "@attiko/db/client";
 import { artists, platformProfiles, users, artistContacts } from "@attiko/db/schema";
-import { sql, eq, and, not, lte, gte, or } from "drizzle-orm";
+import { sql, eq, and, not, lte, gte, or, desc, ilike, arrayOverlaps } from "drizzle-orm";
 import { geocodeLocation } from "../services/geocoding.js";
 import { logger } from "../logger.js";
 
@@ -15,6 +15,60 @@ export const searchRouter = router({
     role: ctx.user.role,
     email: ctx.user.email,
   })),
+
+  browse: protectedProcedure
+    .input(z.object({
+      talentTypes: z.array(z.string()).optional(),
+      genres: z.array(z.string()).optional(),
+      hasVideo: z.boolean().optional(),
+      page: z.number().default(1),
+      pageSize: z.number().default(24),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const conditions = [not(artists.isOptedOut)];
+
+      if (input.talentTypes && input.talentTypes.length > 0) {
+        conditions.push(or(...input.talentTypes.map((t) => eq(artists.talentType, t as any)))!);
+      }
+      if (input.genres && input.genres.length > 0) {
+        conditions.push(arrayOverlaps(artists.genres, input.genres));
+      }
+      if (input.hasVideo) {
+        conditions.push(not(sql`${artists.videoUrl} IS NULL`));
+      }
+
+      const offset = (input.page - 1) * input.pageSize;
+      const rows = await db
+        .select({
+          id: artists.id, slug: artists.slug, name: artists.name,
+          talentType: artists.talentType, bio: artists.bio,
+          city: artists.city, country: artists.country,
+          genres: artists.genres, imageUrl: artists.imageUrl,
+          videoUrl: artists.videoUrl,
+          rateMinCents: artists.rateMinCents, rateMaxCents: artists.rateMaxCents,
+          rateCurrency: artists.rateCurrency,
+          eventFitScore: artists.eventFitScore, overallScore: artists.overallScore,
+        })
+        .from(artists)
+        .where(and(...conditions))
+        .orderBy(desc(sql`COALESCE(${artists.overallScore}, 0)`))
+        .limit(input.pageSize)
+        .offset(offset);
+
+      return {
+        items: rows.map((r) => ({
+          ...r,
+          rateMin: r.rateMinCents ? r.rateMinCents / 100 : null,
+          rateMax: r.rateMaxCents ? r.rateMaxCents / 100 : null,
+          distanceMiles: null,
+          sources: [] as string[],
+          socialSources: [] as string[],
+        })),
+        page: input.page,
+        hasMore: rows.length === input.pageSize,
+      };
+    }),
 
   search: protectedProcedure
     .input(searchInputSchema)

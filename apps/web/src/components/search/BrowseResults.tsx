@@ -4,34 +4,27 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { ArtistCard } from "./ArtistCard";
 
-interface SearchResultsProps {
-  query: string;
-  location: string;
-  radiusMiles: number;
+interface BrowseResultsProps {
+  talentType: string;
+  hasVideo: boolean;
 }
 
-export function SearchResults({ query, location, radiusMiles }: SearchResultsProps) {
+export function BrowseResults({ talentType, hasVideo }: BrowseResultsProps) {
   const [page, setPage] = useState(1);
 
-  const { data, isLoading, error } = trpc.search.search.useQuery(
-    { query, location, radiusMiles, page, pageSize: 20 },
-    { enabled: Boolean(query && location) }
-  );
+  const { data, isLoading } = trpc.search.browse.useQuery({
+    talentTypes: talentType ? [talentType] : undefined,
+    hasVideo: hasVideo || undefined,
+    page,
+    pageSize: 24,
+  });
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {Array.from({ length: 12 }).map((_, i) => (
           <div key={i} className="aspect-[3/4] bg-charcoal border border-gold/5 animate-pulse" />
         ))}
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="py-12 text-center">
-        <p className="text-red-400/70 text-sm font-sans">{error.message}</p>
       </div>
     );
   }
@@ -39,9 +32,9 @@ export function SearchResults({ query, location, radiusMiles }: SearchResultsPro
   if (!data || data.items.length === 0) {
     return (
       <div className="py-24 text-center">
-        <p className="font-display text-3xl text-gold/60 font-light mb-3">No results found</p>
+        <p className="font-display text-3xl text-gold/60 font-light mb-3">No artists yet</p>
         <p className="text-stone/40 text-sm font-sans">
-          Try broadening your search radius or adjusting the talent type.
+          The database is being populated. Check back soon or try a search above.
         </p>
       </div>
     );
@@ -49,10 +42,7 @@ export function SearchResults({ query, location, radiusMiles }: SearchResultsPro
 
   return (
     <div>
-      <p className="text-stone/40 text-[11px] tracking-widest uppercase mb-6 font-sans">
-        {data.items.length} performers found near {data.geocodedLocation?.label ?? location}
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {data.items.map((artist) => (
           <ArtistCard key={artist.id} artist={artist} />
         ))}
