@@ -171,7 +171,7 @@ function AutoPopulateTab() {
           </div>
           <div>
             <p className="text-gold mb-1">Platforms</p>
-            <p className="text-stone/60 text-xs">YouTube, Last.fm, MusicBrainz</p>
+            <p className="text-stone/60 text-xs">Last.fm, MusicBrainz (YouTube reserved for per-artist enrichment)</p>
           </div>
         </div>
       </div>

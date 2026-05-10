@@ -1,4 +1,4 @@
-import { YouTubeScraper, LastFmScraper, MusicBrainzScraper } from "@attiko/scrapers";
+import { LastFmScraper, MusicBrainzScraper } from "@attiko/scrapers";
 import { geocodeLocation } from "./geocoding.js";
 import { ingestScrapeResults } from "./ingest.js";
 import { logger } from "../logger.js";
@@ -35,7 +35,8 @@ const TALENT_TYPES = [
 ];
 
 const LOCATIONS = ["New York City", "Brooklyn", "Newark"];
-const PLATFORMS = ["youtube", "lastfm", "musicbrainz"] as const;
+// YouTube excluded — 100/day quota is exhausted by bulk runs; use it only for per-artist enrichment
+const PLATFORMS = ["lastfm", "musicbrainz"] as const;
 type Platform = typeof PLATFORMS[number];
 
 interface AutoPopulateState {
@@ -75,8 +76,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function scrapeOne(query: string, location: string, platform: Platform): Promise<void> {
-  const apiKey = platform === "youtube" ? process.env["YOUTUBE_API_KEY"] : platform === "lastfm" ? process.env["LASTFM_API_KEY"] : null;
-  if ((platform === "youtube" || platform === "lastfm") && !apiKey) return;
+  const apiKey = platform === "lastfm" ? process.env["LASTFM_API_KEY"] : null;
+  if (platform === "lastfm" && !apiKey) return;
 
   const geoResult = await geocodeLocation(location);
   if (geoResult.isErr()) {
@@ -86,10 +87,7 @@ async function scrapeOne(query: string, location: string, platform: Platform): P
   const geo = geoResult.value;
 
   let results;
-  if (platform === "youtube") {
-    const scraper = new YouTubeScraper(apiKey!);
-    results = await scraper.search(query, location);
-  } else if (platform === "lastfm") {
+  if (platform === "lastfm") {
     const scraper = new LastFmScraper(apiKey!);
     results = await scraper.search(query, location);
   } else {
