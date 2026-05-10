@@ -30,7 +30,6 @@
     "express": "^4.19.0",
     "ioredis": "^5.3.2",
     "neverthrow": "^8.0.0",
-    "node-cron": "^4.2.1",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
     "superjson": "^2.2.0",
