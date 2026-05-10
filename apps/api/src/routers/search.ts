@@ -4,7 +4,7 @@ import { router, protectedProcedure } from "../trpc.js";
 import { searchInputSchema, DEFAULT_RANKING_WEIGHTS } from "@attiko/shared/schemas";
 import { getDb } from "@attiko/db/client";
 import { artists, platformProfiles, users, artistContacts } from "@attiko/db/schema";
-import { sql, eq, and, not, lte, gte, or, desc, ilike, arrayOverlaps } from "drizzle-orm";
+import { sql, eq, and, not, lte, gte, or, desc } from "drizzle-orm";
 import { geocodeLocation } from "../services/geocoding.js";
 import { logger } from "../logger.js";
 
@@ -32,7 +32,7 @@ export const searchRouter = router({
         conditions.push(or(...input.talentTypes.map((t) => eq(artists.talentType, t as any)))!);
       }
       if (input.genres && input.genres.length > 0) {
-        conditions.push(arrayOverlaps(artists.genres, input.genres));
+        conditions.push(sql`${artists.genres} && ARRAY[${sql.join(input.genres.map((g) => sql`${g}`), sql`, `)}]::text[]`);
       }
       if (input.hasVideo) {
         conditions.push(not(sql`${artists.videoUrl} IS NULL`));
