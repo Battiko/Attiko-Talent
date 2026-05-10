@@ -1,4 +1,5 @@
 import { bulkEnrichMissing, bulkEnrichSocial } from "./services/enrich.js";
+import { runAutoPopulate } from "./services/autoPopulate.js";
 import { logger } from "./logger.js";
 
 function scheduleDaily(utcHour: number, task: () => Promise<void>): void {
@@ -26,5 +27,11 @@ export function startCronJobs(): void {
       bulkEnrichSocial(25),
     ]);
     logger.info({ images, bios, social }, "Nightly enrichment complete");
+  });
+
+  // 8am EST = 13:00 UTC
+  scheduleDaily(13, async () => {
+    logger.info("Daily auto-populate started");
+    await runAutoPopulate();
   });
 }

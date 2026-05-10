@@ -8,6 +8,7 @@ import { geocodeLocation } from "../services/geocoding.js";
 import { ingestScrapeResults } from "../services/ingest.js";
 import { logger } from "../logger.js";
 import { enrichArtistById, bulkEnrichMissing, enrichSocialProfiles, bulkEnrichSocial } from "../services/enrich.js";
+import { runAutoPopulate, getAutoPopulateStatus } from "../services/autoPopulate.js";
 
 const LOCATION_EXPANSIONS: Record<string, string[]> = {
   "tri-state area": ["New York City", "Brooklyn", "Queens", "Bronx", "Staten Island", "Newark", "Jersey City", "Hoboken", "Stamford", "Hartford", "Bridgeport", "Long Island"],
@@ -271,6 +272,19 @@ export const operatorRouter = router({
     .mutation(async ({ input }) => {
       return bulkEnrichSocial(input.limit);
     }),
+
+  startAutoPopulate: ownerProcedure
+    .mutation(async () => {
+      if (getAutoPopulateStatus().running) {
+        return { started: false, message: "Already running" };
+      }
+      // fire-and-forget
+      runAutoPopulate().catch((err) => logger.error({ err }, "Auto-populate failed"));
+      return { started: true, message: "Auto-populate started" };
+    }),
+
+  getAutoPopulateStatus: ownerProcedure
+    .query(() => getAutoPopulateStatus()),
 
   getAuditLog: ownerProcedure
     .input(z.object({ page: z.number().default(1), pageSize: z.number().default(100) }))

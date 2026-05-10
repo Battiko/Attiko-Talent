@@ -5,7 +5,7 @@ import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { Trash2, Play, Save, ExternalLink, Sparkles } from "lucide-react";
 
-type Tab = "search" | "presets" | "artists" | "quality" | "users" | "audit";
+type Tab = "search" | "presets" | "artists" | "quality" | "users" | "audit" | "auto-populate";
 type Platform = "spotify" | "youtube" | "lastfm" | "musicbrainz";
 
 interface Preset { name: string; query: string; location: string; platforms: Platform[] }
@@ -23,6 +23,7 @@ export function ConsoleLayout() {
   const { data: stats, refetch: refetchStats } = trpc.operator.getStats.useQuery();
 
   const TABS: { key: Tab; label: string }[] = [
+    { key: "auto-populate", label: "Auto-Populate" },
     { key: "search", label: "Search Artists" },
     { key: "presets", label: "Presets" },
     { key: "artists", label: "Artist Manager" },
@@ -51,12 +52,128 @@ export function ConsoleLayout() {
             </button>
           ))}
         </div>
+        {activeTab === "auto-populate" && <AutoPopulateTab />}
         {activeTab === "search" && <SearchTab onSuccess={refetchStats} />}
         {activeTab === "presets" && <PresetsTab />}
         {activeTab === "artists" && <ArtistsTab onSuccess={refetchStats} />}
         {activeTab === "quality" && <QualityTab />}
         {activeTab === "users" && <UsersTab />}
         {activeTab === "audit" && <AuditTab />}
+      </div>
+    </div>
+  );
+}
+
+/* ── Auto-Populate Tab ── */
+function AutoPopulateTab() {
+  const { data: status, refetch } = trpc.operator.getAutoPopulateStatus.useQuery(undefined, {
+    refetchInterval: (query) => (query.state.data?.running ? 3000 : false),
+  });
+  const start = trpc.operator.startAutoPopulate.useMutation({ onSuccess: () => refetch() });
+
+  const pct = status && status.totalSteps > 0
+    ? Math.round((status.completedSteps / status.totalSteps) * 100)
+    : 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-charcoal border border-charcoal-mid rounded-lg p-6">
+        <h2 className="font-display text-xl text-gold mb-1">Auto-Populate Database</h2>
+        <p className="text-stone text-sm mb-1">
+          Scrapes all 110+ talent types across New York City, Brooklyn, and Newark via YouTube, Last.fm, and MusicBrainz.
+        </p>
+        <p className="text-stone/50 text-xs mb-6">Runs automatically every day at 8:00 AM EST. You can also trigger it manually below.</p>
+
+        <button
+          onClick={() => start.mutate()}
+          disabled={status?.running || start.isPending}
+          className="flex items-center gap-2 bg-gold text-black px-6 py-2.5 rounded text-sm font-medium hover:bg-gold-light transition-colors disabled:opacity-40"
+        >
+          <Sparkles className="w-4 h-4" />
+          {status?.running ? "Running…" : "Run Now"}
+        </button>
+      </div>
+
+      {status && (status.running || status.completedAt) && (
+        <div className="bg-charcoal border border-charcoal-mid rounded-lg p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <p className="text-gold text-sm font-medium">{status.running ? "In Progress" : "Last Run Complete"}</p>
+            {status.startedAt && (
+              <p className="text-stone/50 text-xs">Started {new Date(status.startedAt).toLocaleString()}</p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex justify-between text-xs text-stone mb-1.5">
+              <span>{status.completedSteps.toLocaleString()} / {status.totalSteps.toLocaleString()} talent-location pairs</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="w-full bg-charcoal-mid rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-500 ${status.running ? "bg-gold animate-pulse" : "bg-gold"}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+
+          {status.running && status.currentQuery && (
+            <p className="text-stone text-xs">
+              Scraping: <span className="text-gold">{status.currentQuery}</span>
+              {status.currentLocation && <> in <span className="text-gold">{status.currentLocation}</span></>}
+            </p>
+          )}
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <p className="font-display text-2xl text-gold">{status.created.toLocaleString()}</p>
+              <p className="text-stone text-xs mt-0.5">Created</p>
+            </div>
+            <div className="text-center">
+              <p className="font-display text-2xl text-gold">{status.updated.toLocaleString()}</p>
+              <p className="text-stone text-xs mt-0.5">Updated</p>
+            </div>
+            <div className="text-center">
+              <p className="font-display text-2xl text-gold">{status.skipped.toLocaleString()}</p>
+              <p className="text-stone text-xs mt-0.5">Skipped</p>
+            </div>
+          </div>
+
+          {status.completedAt && (
+            <p className="text-stone/40 text-xs">Completed {new Date(status.completedAt).toLocaleString()}</p>
+          )}
+
+          {status.errors.length > 0 && (
+            <div className="border border-red-400/20 rounded p-3">
+              <p className="text-red-400/70 text-xs font-medium mb-1">{status.errors.length} errors</p>
+              <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                {status.errors.slice(0, 20).map((e, i) => (
+                  <p key={i} className="text-red-400/50 text-xs">{e}</p>
+                ))}
+                {status.errors.length > 20 && (
+                  <p className="text-red-400/30 text-xs">+{status.errors.length - 20} more</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="bg-charcoal border border-charcoal-mid rounded-lg p-5">
+        <p className="text-stone text-xs uppercase tracking-wider mb-3">Coverage</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+          <div>
+            <p className="text-gold mb-1">Talent Types</p>
+            <p className="text-stone/60 text-xs">110+ types including Jazz, Latin, Gospel, Classical, DJs, Dancers, and more</p>
+          </div>
+          <div>
+            <p className="text-gold mb-1">Locations</p>
+            <p className="text-stone/60 text-xs">New York City, Brooklyn, Newark</p>
+          </div>
+          <div>
+            <p className="text-gold mb-1">Platforms</p>
+            <p className="text-stone/60 text-xs">YouTube, Last.fm, MusicBrainz</p>
+          </div>
+        </div>
       </div>
     </div>
   );
