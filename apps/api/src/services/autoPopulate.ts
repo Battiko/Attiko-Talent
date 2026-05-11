@@ -36,10 +36,27 @@ const TALENT_TYPES = [
 
 const LOCATIONS = ["New York City", "Brooklyn", "Newark"];
 
-// YouTube quota: 10,000 units/day, each search = 100 units → 100 searches max.
-// We cap at 80 per run to leave headroom for per-artist enrichment.
-// Each run shuffles the talent types so YouTube rotates through the full list over time.
-const YOUTUBE_DAILY_CAP = 80;
+// Front-line types get YouTube first — singers, DJs, dancers, and the visually
+// compelling instruments where video is the main selling point.
+// 25 types × 3 locations = 75 YouTube searches, leaving ~20 quota for enrichment.
+const YOUTUBE_PRIORITY = [
+  // Vocalists & Singers
+  "Vocalist", "Vocal Female", "Vocal Male",
+  "R&B Singer", "Voc R&B Female", "Voc R&B Male",
+  "Opera Singer", "Gospel Choir", "Rapper", "Sinatra Specialist",
+  // DJs
+  "DJ",
+  // Visual / front-of-stage instruments
+  "Saxophone", "Trumpet", "Violin", "Flamenco Guitar", "Harp", "Piano",
+  // Dancers
+  "Belly Dancer", "Flamenco Dancer", "Salsa Dancers", "Ballroom Dancers", "Dancer",
+  // Bands where the frontperson is the draw
+  "Wedding Band", "Jazz Band", "Soul Band",
+];
+
+// YouTube quota: 10,000 units/day, 100 units/search = 100 searches max.
+// Priority types always get YouTube. Remaining quota goes to secondary types in shuffled order.
+const YOUTUBE_DAILY_CAP = 95;
 
 interface AutoPopulateState {
   running: boolean;
@@ -129,13 +146,16 @@ export async function runAutoPopulate(): Promise<void> {
     return;
   }
 
-  // Shuffle so YouTube covers different types each day, rotating through the full list over time
-  const shuffledTypes = shuffle(TALENT_TYPES);
+  // Priority types first (always get YouTube), then secondary types shuffled
+  // so remaining YouTube quota rotates through the full list over time
+  const prioritySet = new Set(YOUTUBE_PRIORITY);
+  const secondaryTypes = shuffle(TALENT_TYPES.filter((t) => !prioritySet.has(t)));
+  const orderedTypes = [...YOUTUBE_PRIORITY, ...secondaryTypes];
 
   state.running = true;
   state.startedAt = new Date().toISOString();
   state.completedAt = null;
-  state.totalSteps = shuffledTypes.length * LOCATIONS.length;
+  state.totalSteps = orderedTypes.length * LOCATIONS.length;
   state.completedSteps = 0;
   state.created = 0;
   state.updated = 0;
@@ -143,15 +163,15 @@ export async function runAutoPopulate(): Promise<void> {
   state.errors = [];
   state.youtubeSearchesThisRun = 0;
 
-  logger.info({ totalSteps: state.totalSteps, youtubeCap: YOUTUBE_DAILY_CAP }, "Auto-populate started");
+  logger.info({ totalSteps: state.totalSteps, youtubeCap: YOUTUBE_DAILY_CAP, priorityTypes: YOUTUBE_PRIORITY.length }, "Auto-populate started");
 
   try {
-    for (const talentType of shuffledTypes) {
+    for (const talentType of orderedTypes) {
       for (const location of LOCATIONS) {
         state.currentQuery = talentType;
         state.currentLocation = location;
 
-        // Always run Last.fm and MusicBrainz — no quota limits
+        // Last.fm and MusicBrainz run for every type — no quota limits
         for (const platform of ["lastfm", "musicbrainz"] as const) {
           try {
             await scrapeOne(talentType, location, platform);
@@ -162,7 +182,7 @@ export async function runAutoPopulate(): Promise<void> {
           await sleep(400);
         }
 
-        // YouTube: only run if under the daily cap
+        // YouTube: priority types always run; secondary types use whatever quota remains
         if (state.youtubeSearchesThisRun < YOUTUBE_DAILY_CAP) {
           try {
             await scrapeOne(talentType, location, "youtube");
