@@ -10,6 +10,32 @@ import { logger } from "../logger.js";
 
 const MILES_TO_METERS = 1609.344;
 
+// Map colloquial metro names to geocodable city names
+const LOCATION_ALIASES: Record<string, string> = {
+  "tri-state area": "New York City, NY",
+  "tri state area": "New York City, NY",
+  "nyc area": "New York City, NY",
+  "nyc metro": "New York City, NY",
+  "nyc": "New York City, NY",
+  "new york area": "New York City, NY",
+  "new york metro": "New York City, NY",
+  "los angeles area": "Los Angeles, CA",
+  "la area": "Los Angeles, CA",
+  "la metro": "Los Angeles, CA",
+  "miami area": "Miami, FL",
+  "south florida": "Miami, FL",
+  "chicago area": "Chicago, IL",
+  "chicago metro": "Chicago, IL",
+  "bay area": "San Francisco, CA",
+  "sf bay area": "San Francisco, CA",
+  "dc area": "Washington, DC",
+  "dmv": "Washington, DC",
+};
+
+function normalizeLocation(location: string): string {
+  return LOCATION_ALIASES[location.toLowerCase().trim()] ?? location;
+}
+
 export const searchRouter = router({
   me: protectedProcedure.query(({ ctx }) => ({
     role: ctx.user.role,
@@ -77,12 +103,13 @@ export const searchRouter = router({
       const db = getDb();
       const weights = input.sortWeights ?? DEFAULT_RANKING_WEIGHTS;
 
-      const geoResult = await geocodeLocation(input.location);
+      const resolvedLocation = normalizeLocation(input.location);
+      const geoResult = await geocodeLocation(resolvedLocation);
       if (geoResult.isErr()) {
-        logger.warn({ error: geoResult.error, location: input.location }, "Geocoding failed");
+        logger.warn({ error: geoResult.error, location: input.location, resolved: resolvedLocation }, "Geocoding failed");
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Could not geocode location: ${input.location}`,
+          message: `Could not find location: "${input.location}". Try a city name like "New York" or "Brooklyn".`,
         });
       }
       const { lat, lng } = geoResult.value;

@@ -80,6 +80,13 @@ export async function ingestScrapeResults(
       const genres = artistData.genres ?? [];
       const followerCount = primaryProfile.followerCount ?? null;
 
+      // Filter out low-quality YouTube results — channels with no subscribers
+      // are almost certainly not professional performers
+      if (primaryProfile.source === "youtube" && (followerCount ?? 0) < 25) {
+        summary.skipped++;
+        continue;
+      }
+
       const socialProofScore = calcSocialProofScore(followerCount);
       const mediaQualityScore = calcMediaQualityScore(artistData);
       const eventFitScore = calcEventFitScore(genres);
@@ -129,6 +136,13 @@ export async function ingestScrapeResults(
               eq(platformProfiles.externalId, primaryProfile.externalId)
             )
           );
+
+        // Fill in geo_point if this artist doesn't have one yet
+        if (location?.lat && location?.lng) {
+          await db.execute(
+            sql`UPDATE artists SET geo_point = ST_SetSRID(ST_MakePoint(${location.lng}, ${location.lat}), 4326), lat = ${location.lat}, lng = ${location.lng} WHERE id = ${existingProfile.artistId} AND geo_point IS NULL`
+          );
+        }
 
         summary.updated++;
       } else {
