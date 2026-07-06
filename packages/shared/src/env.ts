@@ -2,7 +2,9 @@ import { z } from "zod";
 
 const serverEnvSchema = z.object({
   DATABASE_URL: z.string().url("DATABASE_URL must be a valid URL"),
-  REDIS_URL: z.string().url("REDIS_URL must be a valid URL"),
+  // Optional: Redis is only used by the health check today (no queues in
+  // production code paths) — must not block cloud deploys that lack Redis
+  REDIS_URL: z.string().url("REDIS_URL must be a valid URL").optional(),
   CLERK_SECRET_KEY: z.string().min(1, "CLERK_SECRET_KEY is required"),
   OWNER_EMAIL: z
     .string()

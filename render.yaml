@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: attiko-api
+    runtime: node
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @attiko/api build
+    startCommand: node apps/api/dist/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: https://attiko-talent-web.vercel.app
+      - key: DATABASE_URL
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: INTERNAL_API_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: LASTFM_API_KEY
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CSE_ID
+        sync: false
