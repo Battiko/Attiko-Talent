@@ -42,7 +42,7 @@ const LOCATIONS = ["New York City", "Brooklyn", "Newark"];
 const YOUTUBE_PRIORITY = [
   // Vocalists & Singers
   "Vocalist", "Vocal Female", "Vocal Male",
-  "R&B Singer", "Voc R&B Female", "Voc R&B Male",
+  "R&B Singer",
   "Opera Singer", "Gospel Choir", "Rapper", "Sinatra Specialist",
   // DJs
   "DJ",
@@ -134,7 +134,7 @@ async function scrapeOne(query: string, location: string, platform: "youtube" | 
     return;
   }
 
-  const summary = await ingestScrapeResults(results.value, geo);
+  const summary = await ingestScrapeResults(results.value, geo, query);
   state.created += summary.created;
   state.updated += summary.updated;
   state.skipped += summary.skipped;

@@ -36,6 +36,46 @@ function normalizeLocation(location: string): string {
   return LOCATION_ALIASES[location.toLowerCase().trim()] ?? location;
 }
 
+const SEARCH_LIMITS: Record<string, number> = {
+  user: 5,
+  pro: Infinity,
+  agency: Infinity,
+  admin: Infinity,
+  owner: Infinity,
+};
+
+// Enforced here (not Express middleware) because the limit applies to this
+// one procedure — Express middleware on /trpc can't target a single procedure.
+async function enforceSearchLimit(
+  db: ReturnType<typeof getDb>,
+  user: import("@attiko/db/schema").User
+): Promise<void> {
+  if (user.role === "owner" || user.role === "admin") return;
+
+  const now = new Date();
+  const trialActive = user.trialEndsAt && user.trialEndsAt > now;
+  const effectiveRole = trialActive ? "pro" : user.role;
+  const limit = SEARCH_LIMITS[effectiveRole] ?? SEARCH_LIMITS["user"] ?? 5;
+
+  let used = user.searchesUsedThisMonth;
+  const monthAgo = new Date(now);
+  monthAgo.setDate(monthAgo.getDate() - 30);
+  if (user.searchesResetAt < monthAgo) {
+    await db
+      .update(users)
+      .set({ searchesUsedThisMonth: 0, searchesResetAt: now })
+      .where(eq(users.id, user.id));
+    used = 0;
+  }
+
+  if (used >= limit) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Monthly search limit reached. Upgrade to Pro for unlimited searches.",
+    });
+  }
+}
+
 export const searchRouter = router({
   me: protectedProcedure.query(({ ctx }) => ({
     role: ctx.user.role,
@@ -52,7 +92,10 @@ export const searchRouter = router({
     }))
     .query(async ({ input }) => {
       const db = getDb();
-      const conditions = [not(artists.isOptedOut)];
+      const conditions = [
+        not(artists.isOptedOut),
+        sql`NOT COALESCE((meta->>'notPerformer')::boolean, false)`,
+      ];
 
       if (input.talentTypes && input.talentTypes.length > 0) {
         conditions.push(or(...input.talentTypes.map((t) => eq(artists.talentType, t as any)))!);
@@ -101,6 +144,7 @@ export const searchRouter = router({
     .query(async ({ input, ctx }) => {
       const user = ctx.user;
       const db = getDb();
+      await enforceSearchLimit(db, user);
       const weights = input.sortWeights ?? DEFAULT_RANKING_WEIGHTS;
 
       const resolvedLocation = normalizeLocation(input.location);
@@ -117,6 +161,8 @@ export const searchRouter = router({
 
       const conditions = [
         not(artists.isOptedOut),
+        // Exclude profiles the AI vetting pass flagged as non-performers
+        sql`NOT COALESCE((meta->>'notPerformer')::boolean, false)`,
         sql`geo_point IS NOT NULL`,
         sql`ST_DWithin(
           geo_point::geography,
@@ -125,20 +171,31 @@ export const searchRouter = router({
         )`,
       ];
 
+      // Every query word must match SOMEWHERE on the artist (AND across words,
+      // OR across fields). The old OR-across-words let "jazz saxophonist"
+      // return anyone matching just "jazz" — a big source of irrelevant results.
+      // queryRelevance ranks matches by field quality: a hit in the name or
+      // skill tags is worth far more than a passing mention in a bio.
+      let queryRelevance = sql`0`;
       if (input.query && input.query.trim()) {
         const words = input.query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-        const allWordConditions = words.flatMap((word) => {
+        for (const word of words) {
           const pattern = `%${word}%`;
-          return [
-            sql`LOWER(${artists.name}) LIKE ${pattern}`,
-            sql`LOWER(COALESCE(${artists.bio}, '')) LIKE ${pattern}`,
-            sql`LOWER(${artists.talentType}::text) LIKE ${pattern}`,
-            sql`EXISTS (SELECT 1 FROM unnest(${artists.genres}) g WHERE LOWER(g) LIKE ${pattern})`,
-            sql`EXISTS (SELECT 1 FROM unnest(${artists.tags}) t WHERE LOWER(t) LIKE ${pattern})`,
-          ];
-        });
-        if (allWordConditions.length > 0) {
-          conditions.push(or(...allWordConditions)!);
+          conditions.push(
+            or(
+              sql`LOWER(${artists.name}) LIKE ${pattern}`,
+              sql`LOWER(COALESCE(${artists.bio}, '')) LIKE ${pattern}`,
+              sql`LOWER(${artists.talentType}::text) LIKE ${pattern}`,
+              sql`EXISTS (SELECT 1 FROM unnest(${artists.genres}) g WHERE LOWER(g) LIKE ${pattern})`,
+              sql`EXISTS (SELECT 1 FROM unnest(${artists.tags}) t WHERE LOWER(t) LIKE ${pattern})`
+            )!
+          );
+          queryRelevance = sql`${queryRelevance}
+            + (CASE WHEN LOWER(${artists.name}) LIKE ${pattern} THEN 40 ELSE 0 END)
+            + (CASE WHEN LOWER(${artists.talentType}::text) LIKE ${pattern}
+                      OR EXISTS (SELECT 1 FROM unnest(${artists.tags}) t WHERE LOWER(t) LIKE ${pattern})
+                      OR EXISTS (SELECT 1 FROM unnest(${artists.genres}) g WHERE LOWER(g) LIKE ${pattern})
+                    THEN 30 ELSE 0 END)`;
         }
       }
 
@@ -146,12 +203,14 @@ export const searchRouter = router({
         conditions.push(or(...input.talentTypes.map((t) => eq(artists.talentType, t)))!);
       }
 
-      if (input.budgetMin !== undefined) {
-        conditions.push(or(lte(artists.rateMinCents, input.budgetMin * 100), sql`${artists.rateMinCents} IS NULL`)!);
+      // Budget overlap: the artist's rate range must intersect the user's
+      // budget range. Artists with no published rate are always included.
+      if (input.budgetMax !== undefined) {
+        conditions.push(or(lte(artists.rateMinCents, input.budgetMax * 100), sql`${artists.rateMinCents} IS NULL`)!);
       }
 
-      if (input.budgetMax !== undefined) {
-        conditions.push(or(gte(artists.rateMaxCents, input.budgetMax * 100), sql`${artists.rateMaxCents} IS NULL`)!);
+      if (input.budgetMin !== undefined) {
+        conditions.push(or(gte(artists.rateMaxCents, input.budgetMin * 100), sql`${artists.rateMaxCents} IS NULL`)!);
       }
 
       const offset = (input.page - 1) * input.pageSize;
@@ -168,7 +227,8 @@ export const searchRouter = router({
         .where(and(...conditions))
         .orderBy(
           sql`(
-            COALESCE(${artists.overallScore}, 0) * ${sql.raw(String(weights.semantic + weights.socialProof + weights.eventFit + weights.mediaQuality))}
+            (${queryRelevance}) * 3
+            + COALESCE(${artists.overallScore}, 0) * ${sql.raw(String(weights.semantic + weights.socialProof + weights.eventFit + weights.mediaQuality))}
             + COALESCE(${artists.recencyScore}, 0) * ${sql.raw(String(weights.recency))}
             - (ST_Distance(
                 geo_point::geography,
@@ -268,7 +328,7 @@ export const searchRouter = router({
 
       const [profiles, contacts] = await Promise.all([
         db.select().from(platformProfiles).where(eq(platformProfiles.artistId, row.id)),
-        db.select().from(artistContacts).where(eq(artistContacts.artistId, row.id)).orderBy(artistContacts.confidenceScore),
+        db.select().from(artistContacts).where(eq(artistContacts.artistId, row.id)).orderBy(desc(artistContacts.confidenceScore)),
       ]);
 
       return {

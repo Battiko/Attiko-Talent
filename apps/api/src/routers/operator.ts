@@ -9,6 +9,7 @@ import { ingestScrapeResults } from "../services/ingest.js";
 import { logger } from "../logger.js";
 import { enrichArtistById, bulkEnrichMissing, enrichSocialProfiles, bulkEnrichSocial } from "../services/enrich.js";
 import { runAutoPopulate, getAutoPopulateStatus } from "../services/autoPopulate.js";
+import { runClassification, getClassificationStatus } from "../services/classify.js";
 
 const LOCATION_EXPANSIONS: Record<string, string[]> = {
   "tri-state area": ["New York City", "Brooklyn", "Queens", "Bronx", "Staten Island", "Newark", "Jersey City", "Hoboken", "Stamford", "Hartford", "Bridgeport", "Long Island"],
@@ -94,7 +95,7 @@ export const operatorRouter = router({
             continue;
           }
 
-          const summary = await ingestScrapeResults(results.value, geo);
+          const summary = await ingestScrapeResults(results.value, geo, input.query);
           totalCreated += summary.created;
           totalUpdated += summary.updated;
           totalSkipped += summary.skipped;
@@ -285,6 +286,23 @@ export const operatorRouter = router({
 
   getAutoPopulateStatus: ownerProcedure
     .query(() => getAutoPopulateStatus()),
+
+  // AI vetting: classify every profile as bookable act vs junk, fix talent
+  // types, and extract skill tags. Fire-and-forget like auto-populate.
+  startClassification: ownerProcedure
+    .input(z.object({ maxArtists: z.number().int().min(1).optional() }).optional())
+    .mutation(({ input }) => {
+      if (getClassificationStatus().running) {
+        return { started: false, message: "Already running" };
+      }
+      runClassification(input?.maxArtists).catch((err) =>
+        logger.error({ err }, "Classification failed")
+      );
+      return { started: true, message: "Classification started" };
+    }),
+
+  getClassificationStatus: ownerProcedure
+    .query(() => getClassificationStatus()),
 
   getAuditLog: ownerProcedure
     .input(z.object({ page: z.number().default(1), pageSize: z.number().default(100) }))

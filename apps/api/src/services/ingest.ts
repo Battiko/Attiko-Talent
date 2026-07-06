@@ -43,10 +43,34 @@ export interface IngestSummary {
   skipped: number;
 }
 
+// Map a search query like "Belly Dancer" or "Jazz Band" to the talent_type enum
+// so skill filtering works. Order matters — first match wins.
+const TALENT_TYPE_PATTERNS: [RegExp, "dj" | "dancer" | "band" | "ensemble" | "vocalist" | "instrumentalist"][] = [
+  [/\bdj\b/i, "dj"],
+  [/dancer|dance\b|dancing/i, "dancer"],
+  [/\bband\b/i, "band"],
+  [/ensemble|choir|quartet|trio|duo|orchestra|group|mariachi/i, "ensemble"],
+  [/singer|vocal|opera|rapper|\bmc\b|karaoke/i, "vocalist"],
+  [/guitar|piano|violin|sax|trumpet|cello|harp|drum|flute|bass|banjo|accordion|keyboard|organ|oud|sitar|tabla|ukulele|viola|mandolin|clarinet|oboe|tuba|trombone|percussion|bagpipe|harmonica|fiddle|steel pan|vibraphone|balalaika|bouzouki/i, "instrumentalist"],
+];
+
+export function talentTypeFromQuery(query: string): "dj" | "dancer" | "band" | "ensemble" | "vocalist" | "instrumentalist" | "musician" {
+  for (const [pattern, type] of TALENT_TYPE_PATTERNS) {
+    if (pattern.test(query)) return type;
+  }
+  return "musician";
+}
+
 export async function ingestScrapeResults(
   results: ScrapeResult[],
-  defaultLocation: { lat: number; lng: number; city: string | null; country: string | null; label: string } | null
+  defaultLocation: { lat: number; lng: number; city: string | null; country: string | null; label: string } | null,
+  searchQuery?: string
 ): Promise<IngestSummary> {
+  // The query that found this artist IS a skill label — keep it as a tag so
+  // "belly dancer" / "mariachi" searches can match, and derive the talent type
+  // instead of defaulting everything to "musician".
+  const queryTag = searchQuery?.toLowerCase().trim() ?? null;
+  const queryTalentType = searchQuery ? talentTypeFromQuery(searchQuery) : null;
   const db = getDb();
   const summary: IngestSummary = { created: 0, updated: 0, skipped: 0 };
 
@@ -102,13 +126,15 @@ export async function ingestScrapeResults(
       }
 
       if (existingProfile) {
-        // Update existing artist's scores and media
+        // Update existing artist's scores and media.
+        // `?? undefined` (not `?? null`) — a re-scrape that returns no
+        // image/bio must NOT wipe data we already have.
         await db
           .update(artists)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .set({
-            imageUrl: artistData.imageUrl ?? null,
-            bio: artistData.bio ?? null,
+            imageUrl: artistData.imageUrl ?? undefined,
+            bio: artistData.bio ?? undefined,
             genres: genres.length > 0 ? genres : undefined,
             socialProofScore,
             mediaQualityScore,
@@ -118,6 +144,14 @@ export async function ingestScrapeResults(
             updatedAt: new Date(),
           } as any)
           .where(eq(artists.id, existingProfile.artistId));
+
+        // Accumulate the search query as a skill tag on repeat encounters
+        if (queryTag) {
+          await db.execute(
+            sql`UPDATE artists SET tags = array_append(tags, ${queryTag})
+                WHERE id = ${existingProfile.artistId} AND NOT (${queryTag} = ANY(tags))`
+          );
+        }
 
         // Update platform profile
         await db
@@ -156,12 +190,12 @@ export async function ingestScrapeResults(
           .values({
             slug,
             name,
-            talentType: artistData.talentType ?? "musician",
+            talentType: artistData.talentType ?? queryTalentType ?? "musician",
             bio: artistData.bio ?? null,
             imageUrl: artistData.imageUrl ?? null,
             videoUrl: artistData.videoUrl ?? null,
             genres: genres,
-            tags: genres,
+            tags: queryTag ? [...new Set([...genres, queryTag])] : genres,
             languages: ["English"],
             city: location?.city ?? artistData.city ?? null,
             country: location?.country ?? null,

@@ -175,10 +175,18 @@ export async function enrichSocialProfiles(artistId: string): Promise<{ found: s
 
 export async function bulkEnrichSocial(limit: number): Promise<{ enriched: number; total: number }> {
   const db = getDb();
-  // Artists that have no instagram or tiktok profile yet
+  // Artists that have no instagram or tiktok profile yet — without this
+  // NOT EXISTS, the nightly job re-processed the same first N artists forever
   const rows = await db
     .select({ id: artists.id })
     .from(artists)
+    .where(
+      sql`NOT EXISTS (
+        SELECT 1 FROM ${platformProfiles} pp
+        WHERE pp.artist_id = ${artists.id} AND pp.source IN ('instagram', 'tiktok')
+      )`
+    )
+    .orderBy(sql`COALESCE(${artists.overallScore}, 0) DESC`)
     .limit(limit);
 
   let enriched = 0;

@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@attiko/db": "workspace:*",
     "@attiko/scrapers": "workspace:*",
     "@attiko/shared": "workspace:*",
