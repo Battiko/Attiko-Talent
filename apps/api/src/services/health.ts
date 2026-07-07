@@ -60,11 +60,17 @@ async function checkQueue(): Promise<ServiceCheck> {
   }
 }
 
+const skippedCheck: ServiceCheck = { status: "ok", latencyMs: 0 };
+
 export async function runHealthCheck(): Promise<HealthCheckResult> {
+  // No REDIS_URL → Redis isn't part of this deployment. Skip those checks:
+  // bullmq retries a missing Redis forever, which hangs this endpoint and
+  // fails platform healthchecks (the API then never comes up).
+  const hasRedis = Boolean(process.env["REDIS_URL"]);
   const [database, redis, queue] = await Promise.all([
     checkDatabase(),
-    checkRedis(),
-    checkQueue(),
+    hasRedis ? checkRedis() : Promise.resolve(skippedCheck),
+    hasRedis ? checkQueue() : Promise.resolve(skippedCheck),
   ]);
 
   const allOk = database.status === "ok" && redis.status === "ok" && queue.status === "ok";
